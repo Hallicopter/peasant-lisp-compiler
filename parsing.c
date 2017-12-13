@@ -35,6 +35,61 @@ void add_history(char *dummy){}
 #include <editline/history.h>
 #endif
 
+
+/*Data structure for taking care of errors.*/
+typedef struct{
+	int type;
+	double num;
+	int err;
+}lval;
+
+/*Enumeration for the possible lval types*/
+enum {LVAL_NUM, LVAL_ERR};
+
+/*Enumeration for the possible errors that can occur*/
+enum {LERR_DIV_ZERO, LERR_BAD_OP, LERR_BAD_NUM};
+
+/*Create a new number type lval*/
+lval lval_num(double x){
+	lval v;
+	v.type = LVAL_NUM;
+	v.num = x;
+	return v;
+}
+
+/*Create a new error type lval*/
+lval  lval_err(int x){
+	lval v;
+	v.type = LVAL_ERR;
+	v.err = x;
+	return v;
+}
+
+/* Print an lval type object */
+void lval_print(lval v){
+	switch(v.type){
+		case LVAL_NUM: 
+			printf("%f", v.num); 
+		break;
+
+		case LVAL_ERR:
+			if(v.err == LERR_DIV_ZERO)
+				printf("Err0r: division by zero.");
+		 	if(v.err == LERR_BAD_OP)
+				printf("Err0r: Invalid operat0r.");
+			if( v.err == LERR_BAD_NUM)
+				printf("Err0r: Invalid number.");
+		break;	
+	}
+}
+
+/*Newline version of lval_print*/
+void lval_println(lval v){
+	lval_print(v);
+	putchar('\n');
+}
+
+
 /* Helper function for the above eval() function*/
 double eval_op(double x, char *op, double y){
 	if(strcmp(op, "+") == 0) return x+y;
