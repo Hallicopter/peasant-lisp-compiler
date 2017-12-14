@@ -163,6 +163,7 @@ int main(int argc, char** argv){
 	/* Attempt to parse the user input*/
 	while(1){
 		char* input = readline("Peasant> ");
+		add_history(input);
 		mpc_result_t r;
 		/* On success, print the AST */
 		if(mpc_parse("<stdin>", input, Peasant, &r)){
