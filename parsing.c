@@ -91,30 +91,39 @@ void lval_println(lval v){
 
 
 /* Helper function for the above eval() function*/
-double eval_op(double x, char *op, double y){
-	if(strcmp(op, "+") == 0) return x+y;
-	if(strcmp(op, "-") == 0) return x-y;
-	if(strcmp(op, "*") == 0) return x*y;
-	if(strcmp(op, "%") == 0) return (int)x%(int)y;
-	if(strcmp(op, "^") == 0) {int res = x; while(--y) res*=x; return res;}
-	if(strcmp(op, "min") == 0) return x<y?x:y;
-	if(strcmp(op, "max") == 0) return x>y?x:y;
+lval eval_op(lval x, char *op, lval y){
+	/* Return value if there is an error */
+	if(x.type == LVAL_ERR) {return x;}
+	if(y.type == LVAL_ERR) {return y;}
 
-	return 0;
+	/* Continue with normal evalutaion if both
+	 * inputs are sane */	
+	if(strcmp(op, "+") == 0) {return lval_num(x.num + y.num);}
+	if(strcmp(op, "-") == 0) {return lval_num(x.num - y.num);}
+	if(strcmp(op, "*") == 0) {return lval_num(x.num * y.num);}
+	if(strcmp(op, "%") == 0) {return lval_num((int)x.num % (int)y.num);}
+	if(strcmp(op, "^") == 0) {int res = x.num; while(--y.num) res*=x.num; return lval_num(res);}
+	if(strcmp(op, "min") == 0) {return x.num < y.num ?x : y;}
+	if(strcmp(op, "max") == 0) {return x.num > y.num?x:y;}
+	if(strcmp(op, "/") == 0){
+		return y.num==0?lval_err(LERR_DIV_ZERO):lval_num(x.num/y.num);
+	}
+
+	return lval_err(LERR_BAD_OP);
 }
 
 
-double eval(mpc_ast_t* t){
+lval eval(mpc_ast_t* t){
 	/*Base case: If tagged as a number, return the number as it is.*/
 	if(strstr(t->tag, "number")){
-		return atof(t->contents);	
+		return lval_num(atof(t->contents));	
 	}
 
 	/*The operator by definitions given below will always be the second child*/
 	char *op = t->children[1]->contents;
 
 	/* Sore the third child in var x */
-	double x = eval(t->children[2]);
+	lval x = eval(t->children[2]);
 
 	/* Iterate through the remaining children */
 	int i = 3;
@@ -167,8 +176,8 @@ int main(int argc, char** argv){
 		mpc_result_t r;
 		/* On success, print the AST */
 		if(mpc_parse("<stdin>", input, Peasant, &r)){
-			double result = eval(r.output);
-			printf("%f\n", result);
+			lval result = eval(r.output);
+			lval_println( result);
 
 			//mpc_ast_print(r.output);
 			mpc_ast_delete(r.output);
