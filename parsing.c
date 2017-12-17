@@ -91,7 +91,7 @@ lval* lval_sexpr(void){
 
 /* Clean deletions for fun and profits */
 void lval_del(lval* v){
-	switch(lval->type){
+	switch(v->type){
 		case LVAL_NUM: break;
 		case LVAL_ERR: free(v->err); break;
 		case LVAL_SYM: free(v->sym); break;
@@ -106,75 +106,124 @@ void lval_del(lval* v){
 	free(v);
 }
 
-/* Print an lval type object */
-void lval_print(lval v){
-	switch(v.type){
-		case LVAL_NUM: 
-			printf("%f", v.num); 
-		break;
 
-		case LVAL_ERR:
-			if(v.err == LERR_DIV_ZERO)
-				printf("Err0r: division by zero.");
-		 	if(v.err == LERR_BAD_OP)
-				printf("Err0r: Invalid operat0r.");
-			if( v.err == LERR_BAD_NUM)
-				printf("Err0r: Invalid number.");
-			break;	
-	}
+/* I know this funtion is kind of of unsafe, but I like to live on the edge*/
+lval* lval_read_num(mpc_ast_t* t){
+	double x = atof(t->contents);
+	return lval_num(x);
 }
 
-/*Newline version of lval_print*/
-void lval_println(lval v){
-	lval_print(v);
-	putchar('\n');
-}
+lval* lval_add(lval* v, lval* x);
+lval* lval_read(mpc_ast_t* t){
 
-
-/* Helper function for the above eval() function*/
-lval eval_op(lval x, char *op, lval y){
-	/* Return value if there is an error */
-	if(x.type == LVAL_ERR) {return x;}
-	if(y.type == LVAL_ERR) {return y;}
-
-	/* Continue with normal evalutaion if both
-	 * inputs are sane */	
-	if(strcmp(op, "+") == 0) {return lval_num(x.num + y.num);}
-	if(strcmp(op, "-") == 0) {return lval_num(x.num - y.num);}
-	if(strcmp(op, "*") == 0) {return lval_num(x.num * y.num);}
-	if(strcmp(op, "%") == 0) {return lval_num((int)x.num % (int)y.num);}
-	if(strcmp(op, "^") == 0) {int res = x.num; while(--y.num) res*=x.num; return lval_num(res);}
-	if(strcmp(op, "min") == 0) {return x.num < y.num ?x : y;}
-	if(strcmp(op, "max") == 0) {return x.num > y.num?x:y;}
-	if(strcmp(op, "/") == 0){
-		return y.num==0?lval_err(LERR_DIV_ZERO):lval_num(x.num/y.num);
-	}
-
-	return lval_err(LERR_BAD_OP);
-}
-
-
-lval eval(mpc_ast_t* t){
-	/*Base case: If tagged as a number, return the number as it is.*/
+	/* If Symbol or Number return an lval of that type */
 	if(strstr(t->tag, "number")){
-		return lval_num(atof(t->contents));	
+		return lval_read_num(t);
 	}
 
-	/*The operator by definitions given below will always be the second child*/
-	char *op = t->children[1]->contents;
+	if(strstr(t->tag, "symbol")){	
+		return lval_sym(t->contents);
+	}
 
-	/* Sore the third child in var x */
-	lval x = eval(t->children[2]);
+	/* create an empty list if root(>) or sexpr */
+	lval* x = NULL;
+	if(strcmp(t->tag, ">") == 0){
+		x = lval_sexpr();
+	}
+	if(strstr(t->tag, "sexpr")){
+		x = lval_sexpr();
+	}
 
-	/* Iterate through the remaining children */
-	int i = 3;
-	while(strstr(t->children[i]->tag, "expr")){
-		x = eval_op(x, op, eval(t->children[i]));
-		i++;
+	/* Fill the list with valid expression contained within */
+	for(int i=0; i < t->children_num; i++){
+		if(strcmp(t->children[i]->contents, "(") == 0) {continue;}
+		if(strcmp(t->children[i]->contents, ")") == 0) {continue;}
+		if(strcmp(t->children[i]->contents, "{") == 0) {continue;}
+		if(strcmp(t->children[i]->contents, "}") == 0) {continue;}
+		if(strcmp(t->children[i]->tag,  "regex") == 0) {continue;}
+
+		x = lval_add(x, lval_read(t->children[i]));
 	}
 
 	return x;
 }
+
+lval* lval_add(lval* v, lval* x){
+	v->count++;
+	v->cell = realloc(v->cell, sizeof(lval*)*v->count);
+	v->cell[v->count - 1] = x;
+	return v;
+}
+
+void lval_print(lval* v);
+
+void lval_expr_print(lval* v, char open, char close){
+	putchar(open);
+	for(int i=0; i<v->count; i++){
+		lval_print(v->cell[i]);
+
+		if(i!= (v->count-1)){
+			putchar(' ');
+		}
+	}
+	putchar(close);
+}
+
+void lval_print(lval* v){
+	switch(v->type){
+		case LVAL_NUM: printf("%.3f", v->num); break;
+		case LVAL_ERR: printf("Error: %s", v->err); break;
+		case LVAL_SYM: printf("%s", v->sym); break;
+		case LVAL_SEXPR: lval_expr_print(v, '(', ')'); break;
+	}
+}
+
+void lval_println(lval *v){lval_print(v); putchar('\n');}
+
+///* Helper function for the above eval() function*/
+//lval eval_op(lval x, char *op, lval y){
+//	/* Return value if there is an error */
+//	if(x.type == LVAL_ERR) {return x;}
+//	if(y.type == LVAL_ERR) {return y;}
+//
+//	/* Continue with normal evalutaion if both
+//	 * inputs are sane */	
+//	if(strcmp(op, "+") == 0) {return lval_num(x.num + y.num);}
+//	if(strcmp(op, "-") == 0) {return lval_num(x.num - y.num);}
+//	if(strcmp(op, "*") == 0) {return lval_num(x.num * y.num);}
+//	if(strcmp(op, "%") == 0) {return lval_num((int)x.num % (int)y.num);}
+//	if(strcmp(op, "^") == 0) {int res = x.num; while(--y.num) res*=x.num; return lval_num(res);}
+//	if(strcmp(op, "min") == 0) {return x.num < y.num ?x : y;}
+//	if(strcmp(op, "max") == 0) {return x.num > y.num?x:y;}
+//	if(strcmp(op, "/") == 0){
+//		return y.num==0?lval_err(LERR_DIV_ZERO):lval_num(x.num/y.num);
+//	}
+//
+//	return lval_err(LERR_BAD_OP);
+//}
+
+
+//lval eval(mpc_ast_t* t){
+//	/*Base case: If tagged as a number, return the number as it is.*/
+//	if(strstr(t->tag, "number")){
+//		return lval_num(atof(t->contents));	
+//	}
+//
+//	/*The operator by definitions given below will always be the second child*/
+//	char *op = t->children[1]->contents;
+//
+//	/* Sore the third child in var x */
+//	lval x = eval(t->children[2]);
+//
+//	/* Iterate through the remaining children */
+//	int i = 3;
+//	while(strstr(t->children[i]->tag, "expr")){
+//		x = eval_op(x, op, eval(t->children[i]));
+//		i++;
+//	}
+//
+//	return x;
+//}
 
 int main(int argc, char** argv){
 	/* Creating the parsers for the Polish notation*/
@@ -200,7 +249,7 @@ int main(int argc, char** argv){
 		"									\
 			number	: /-?[0-9]+(\\.[0-9]*)?/;				\
 			symbol	: '+' | '-' | '*' | '/' | '^' | /min/ | /max/ | '%';	\
-			sexpr	: '(' <expr> ')';					\
+			sexpr	: '(' <expr>* ')';					\
 			expr	: <number> | <symbol> | <sexpr>;			\
 			peasant	:/^/ <expr>* /$/ ;					\
 		",
@@ -219,9 +268,11 @@ int main(int argc, char** argv){
 		mpc_result_t r;
 		/* On success, print the AST */
 		if(mpc_parse("<stdin>", input, Peasant, &r)){
-			lval result = eval(r.output);
-			lval_println( result);
-
+			//lval result = eval(r.output);
+			//lval_println( result);
+			lval* x = lval_read(r.output);
+			lval_println(x);
+			lval_del(x);
 			//mpc_ast_print(r.output);
 			mpc_ast_delete(r.output);
 		}else{
