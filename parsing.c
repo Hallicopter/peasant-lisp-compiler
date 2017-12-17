@@ -37,32 +37,73 @@ void add_history(char *dummy){}
 
 
 /*Data structure for taking care of errors.*/
-typedef struct{
+typedef struct lval{
 	int type;
 	double num;
-	int err;
+	char *err;
+	char *sym;
+	int count;
+	struct lval** cell;
 }lval;
 
 /*Enumeration for the possible lval types*/
-enum {LVAL_NUM, LVAL_ERR};
+enum {LVAL_NUM, LVAL_ERR, LVAL_SYM, LVAL_SEXPR};
 
 /*Enumeration for the possible errors that can occur*/
 enum {LERR_DIV_ZERO, LERR_BAD_OP, LERR_BAD_NUM};
 
 /*Create a new number type lval*/
-lval lval_num(double x){
-	lval v;
-	v.type = LVAL_NUM;
-	v.num = x;
+lval* lval_num(double x){
+	lval *v = malloc(sizeof(lval));
+	v->type = LVAL_NUM;
+	v->num = x;
 	return v;
 }
 
 /*Create a new error type lval*/
-lval  lval_err(int x){
-	lval v;
-	v.type = LVAL_ERR;
-	v.err = x;
+lval* lval_err(char* m){
+	lval* v = malloc(sizeof(lval));
+	v->type = LVAL_ERR;
+	v->err = malloc(sizeof(strlen(m) + 1));
+	strcpy(v->err, m);
+
 	return v;
+}
+
+/* Construct a pointer to new Symbol lval */
+lval* lval_sym(char* s){
+	lval *v = malloc(sizeof(lval));
+	v->type = LVAL_SYM;
+	v->sym 	= malloc(sizeof(strlen(s)+1));
+       	strcpy(v->sym, s);
+
+	return v;	
+}
+
+/* A pointer to a new S-expression */
+lval* lval_sexpr(void){
+	lval* v  = malloc(sizeof(lval));
+	v->type  = LVAL_SEXPR;
+	v->count = 0;
+	v->cell  = NULL;
+	return v;
+}
+
+/* Clean deletions for fun and profits */
+void lval_del(lval* v){
+	switch(lval->type){
+		case LVAL_NUM: break;
+		case LVAL_ERR: free(v->err); break;
+		case LVAL_SYM: free(v->sym); break;
+		
+		case LVAL_SEXPR:
+			for(int i=0; i< v->count; i++){
+				lval_del(v->cell[i]);       
+			}
+		free(v->cell);
+		break;
+	}
+	free(v);
 }
 
 /* Print an lval type object */
@@ -79,7 +120,7 @@ void lval_print(lval v){
 				printf("Err0r: Invalid operat0r.");
 			if( v.err == LERR_BAD_NUM)
 				printf("Err0r: Invalid number.");
-		break;	
+			break;	
 	}
 }
 
@@ -138,10 +179,11 @@ lval eval(mpc_ast_t* t){
 int main(int argc, char** argv){
 	/* Creating the parsers for the Polish notation*/
 	mpc_parser_t* Number	= mpc_new("number");
-	mpc_parser_t* Operator	= mpc_new("operator");
+	mpc_parser_t* Symbol	= mpc_new("symbol");
+	mpc_parser_t* Sexpr	= mpc_new("sexpr");
 	mpc_parser_t* Expr	= mpc_new("expr");
 	mpc_parser_t* Peasant 	= mpc_new("peasant");
-
+	
 	/*Creating the language grammars for the parsers declared above*/
 	/*
 	 * The reasoning behind this:
@@ -157,11 +199,12 @@ int main(int argc, char** argv){
 	mpca_lang(MPCA_LANG_DEFAULT,
 		"									\
 			number	: /-?[0-9]+(\\.[0-9]*)?/;				\
-			operator: '+' | '-' | '*' | '/' | '^' | /min/ | /max/ | '%';	\
-			expr	: <number> | '(' <operator> <expr>+ ')';		\
-			peasant	:/^/ <operator> <expr>+ /$/ ;				\
+			symbol	: '+' | '-' | '*' | '/' | '^' | /min/ | /max/ | '%';	\
+			sexpr	: '(' <expr> ')';					\
+			expr	: <number> | <symbol> | <sexpr>;			\
+			peasant	:/^/ <expr>* /$/ ;					\
 		",
-		Number, Operator, Expr, Peasant
+		Number, Symbol, Sexpr, Expr, Peasant
 	);
 
 
@@ -189,6 +232,6 @@ int main(int argc, char** argv){
 	}
 
 	/* Undefine and Delete the parsers*/
-	mpc_cleanup(4, Number, Operator, Expr, Peasant);
+	mpc_cleanup(4, Number, Symbol, Sexpr, Expr, Peasant);
 	return 0;
 }
