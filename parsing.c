@@ -36,7 +36,14 @@ void add_history(char *dummy){}
 #endif
 
 
-/*Data structure for taking care of errors.*/
+/* This is the data structure that is going to be used
+ * for storing all the input expressions.
+ * The 'type' variable stores the type of data it is holding.
+ * The 'num' variable holds a number if the type is a number.
+ * The 'err' variable wil hold a string representing an error.
+ * The 'sym' variable will hold a symbol,
+ * The count will hold the the length of the cell array.
+ */
 typedef struct lval{
 	int type;
 	double num;
@@ -49,8 +56,9 @@ typedef struct lval{
 /*Enumeration for the possible lval types*/
 enum {LVAL_NUM, LVAL_ERR, LVAL_SYM, LVAL_SEXPR};
 
-/*Enumeration for the possible errors that can occur*/
-enum {LERR_DIV_ZERO, LERR_BAD_OP, LERR_BAD_NUM};
+// Deprecated.
+// Enumeration for the possible errors that can occur*/
+// enum {LERR_DIV_ZERO, LERR_BAD_OP, LERR_BAD_NUM};
 
 /*Create a new number type lval*/
 lval* lval_num(double x){
@@ -180,6 +188,7 @@ void lval_print(lval* v){
 
 void lval_println(lval *v){lval_print(v); putchar('\n');}
 
+//^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^DEPRECATED CODE^^^^^^^^^^^^^^^^^^^^^^^^
 ///* Helper function for the above eval() function*/
 //lval eval_op(lval x, char *op, lval y){
 //	/* Return value if there is an error */
@@ -224,6 +233,113 @@ void lval_println(lval *v){lval_print(v); putchar('\n');}
 //
 //	return x;
 //}
+/*^^^^^^^^^^^^^^^^^^^^END OF DEPRECATED CODE^^^^^^^^^^^^^^^^^^^^*/
+
+lval* lval_eval(lval* v);
+
+lval* lval_pop(lval* v, int i){
+	/* First find the item at i */
+	lval *x = v->cell[i];
+
+	/* Sweet memory shifting over the previous positions */
+	memmove(&v->cell[i], &v->cell[i+1], sizeof(lval*) * v->count-1-i);
+	
+	/* Decrease the value of count */
+	v->count--;
+	
+	/* Reallocate the memory used */
+	v->cell = realloc(v->cell, sizeof(lval*)*v->count);
+	return x;
+}
+
+lval* lval_take(lval *v, int i){
+	lval *x= lval_pop(v, i);
+	lval_del(v);
+	return x;
+}
+
+lval* builtin_op(lval *a, char *op){
+	/* Firstly ensure that all arguements are numbers */
+	for(int i=0; i< a->count; i++){
+		if(a->cell[i]->type != LVAL_NUM){
+			lval_del(a);
+			return lval_err("Clearly you have input a non-number. Please behave yourself, this is an err0r.");
+		}
+	}
+
+	/* Pop the first elements */
+	lval *x = lval_pop(a, 0);
+
+	/* If no arguments and sub expr, then perform unaty negation */
+	if((strcmp(op, "-") == 0) && a->count == 0){
+		x->num *= -1;
+	}
+
+	/* while there are still elements remaining */
+	while(a->count > 0){
+		/* pop the next element */
+		lval *y = lval_pop(a, 0);
+		
+		if(strcmp(op, "+") == 0) {x->num += y->num; }
+		if(strcmp(op, "-") == 0) {x->num -= y->num; }
+		if(strcmp(op, "*") == 0) {x->num *= y->num; }
+		if(strcmp(op, "%") == 0) {x->num = (int)x->num % (int)y->num;} 
+		if(strcmp(op, "^") == 0) {int res = x->num; while(--y->num) res*=x->num; x->num = res;;}
+		if(strcmp(op, "min") == 0) {x = x->num < y->num ?x : y;}
+		if(strcmp(op, "max") == 0) {x = x->num > y->num?x:y;}
+		if(strcmp(op, "/") == 0){
+			if(y->num == 0){
+				lval_del(x);
+				lval_del(y);
+				x = lval_err("Division by zero. Classic rookie err0r. ");
+			}
+			x->num /= y->num;
+		}
+		lval_del(y);
+	}
+	lval_del(a);
+	return x;
+}
+
+lval* lval_eval_sexpr(lval *v){
+	
+	/*Evaluate children*/
+	for(int i=0; i<v->count; i++){
+		v->cell[i] = lval_eval(v->cell[i]);
+	}
+
+	/* Checking for errors */
+	for(int i=0; i<v->count; i++){
+		if(v->cell[i]->type == LVAL_ERR){return lval_take(v, i);}	
+	}
+
+	/* Empty expression */
+	if(v->count == 0) return v;
+
+	/* single expression */
+	if(v->count == 1) {return lval_take(v, 0);}
+
+	/* Ensure first elements is a symbol */
+	lval *f = lval_pop(v, 0);
+	if(f->type != LVAL_SYM){
+		lval_del(f);
+		lval_del(v);
+		return lval_err("The S-expression does not start with a symbol.");
+	}
+
+	/* Call builtin_op() with the operator */
+	lval *result = builtin_op(v, f->sym);
+	lval_del(f);
+	return result;
+}
+
+lval* lval_eval(lval* v){
+	/* Evaluate the S-expressions */
+	if (v->type == LVAL_SEXPR){ return lval_eval_sexpr(v);}
+
+	/* All the other lval types are evaluates similarly */
+	return v;
+}
 
 int main(int argc, char** argv){
 	/* Creating the parsers for the Polish notation*/
@@ -270,7 +386,7 @@ int main(int argc, char** argv){
 		if(mpc_parse("<stdin>", input, Peasant, &r)){
 			//lval result = eval(r.output);
 			//lval_println( result);
-			lval* x = lval_read(r.output);
+			lval* x =lval_eval(lval_read(r.output));
 			lval_println(x);
 			lval_del(x);
 			//mpc_ast_print(r.output);
