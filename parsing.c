@@ -275,6 +275,59 @@ lval* lval_take(lval *v, int i){
 	return x;
 }
 
+lval *builtin_head(lval *a){
+	/* Check the error condition */
+	if (a->count != 1){
+		lval_del(a);
+		return lval_err("the function head has too many arguements. Err0r.");
+	}
+
+	if (a->cell[0]->type != LVAL_QEXPR){
+		lval_del(a);
+		return lval_err("head function takes only q-expressions as inputs. Invalid input. Err0r.");
+	}
+
+	if (a->cell[0]->count == 0){
+		lval_del(a);
+		return lval_err("Empty arguements passed to head function is not acceptable. Err0r.");
+	}
+
+	/* If no error, get the first arguements */
+	lval *v = lval_take(a, 0);
+
+	/* Delete all non head elements and return */
+	while(v->count > 1){
+		lval_del(lval_pop(v, 1));
+	}
+
+	return v;
+}
+
+lval* builtin_tail(lval *a){
+	/* Check the error conditions */
+	if (a->count != 1){
+		lval_del(a);
+		return lval_err("the function tail  has too many arguements. Err0r.");
+	}
+
+	if (a->cell[0]->type != LVAL_QEXPR){
+		lval_del(a);
+		return lval_err("tail function takes only q-expressions as inputs. Invalid input. Err0r.");
+	}
+
+	if (a->cell[0]->count == 0){
+		lval_del(a);
+		return lval_err("Empty arguements passed to tail function is not acceptable. Err0r.");
+	}
+
+	/* take the first arugument */
+	lval *v = lval_take(a, 0);
+
+	lval_del(lval_pop(v, 0));
+
+	return v;
+}
+
 lval* builtin_op(lval *a, char *op){
 	/* Firstly ensure that all arguements are numbers */
 	for(int i=0; i< a->count; i++){
@@ -382,7 +435,8 @@ int main(int argc, char** argv){
 	mpca_lang(MPCA_LANG_DEFAULT,
 		"									\
 			number	: /-?[0-9]+(\\.[0-9]*)?/;				\
-			symbol	: '+' | '-' | '*' | '/' | '^' | /min/ | /max/ | '%';	\
+			symbol	: '+' | '-' | '*' | '/' | '^' | /min/ | /max/ | '%'	\
+				| /list/ | /head/ | /eval/ | /tail/ | /join/ ;		\
 			sexpr	: '(' <expr>* ')';					\
 			qexpr	: '{' <expr>* '}';					\
 			expr	: <number> | <symbol> | <sexpr> | <qexpr>;		\
