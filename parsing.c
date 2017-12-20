@@ -35,6 +35,8 @@ void add_history(char *dummy){}
 #include <editline/history.h>
 #endif
 
+#define LASSERT(args, cond, err) \
+	if(!(cond)) {lval_del(args); return lval_err(err); }
 
 /* This is the data structure that is going to be used
  * for storing all the input expressions.
@@ -277,21 +279,10 @@ lval* lval_take(lval *v, int i){
 
 lval *builtin_head(lval *a){
 	/* Check the error condition */
-	if (a->count != 1){
-		lval_del(a);
-		return lval_err("the function head has too many arguements. Err0r.");
-	}
-
-	if (a->cell[0]->type != LVAL_QEXPR){
-		lval_del(a);
-		return lval_err("head function takes only q-expressions as inputs. Invalid input. Err0r.");
-	}
-
-	if (a->cell[0]->count == 0){
-		lval_del(a);
-		return lval_err("Empty arguements passed to head function is not acceptable. Err0r.");
-	}
-
+	LASSERT(a, a->count == 1, "Function 'head' has way too many arguements. Err0r.");
+	LASSERT(a, a->cell[0]->type == LVAL_QEXPR, "Incorrect type passed to function 'head'. Err0r.");
+	LASSERT(a, a->cell[0]->count != 0, "Function head is passed {} which is empty. Err0r.");
+	
 	/* If no error, get the first arguements */
 	lval *v = lval_take(a, 0);
 
@@ -304,21 +295,11 @@ lval *builtin_head(lval *a){
 }
 
 lval* builtin_tail(lval *a){
-	/* Check the error conditions */
-	if (a->count != 1){
-		lval_del(a);
-		return lval_err("the function tail  has too many arguements. Err0r.");
-	}
-
-	if (a->cell[0]->type != LVAL_QEXPR){
-		lval_del(a);
-		return lval_err("tail function takes only q-expressions as inputs. Invalid input. Err0r.");
-	}
-
-	if (a->cell[0]->count == 0){
-		lval_del(a);
-		return lval_err("Empty arguements passed to tail function is not acceptable. Err0r.");
-	}
+	/* Check the error condition */
+	LASSERT(a, a->count == 1, "Function 'tail' has way too many arguements. Err0r.");
+	LASSERT(a, a->cell[0]->type == LVAL_QEXPR, "Incorrect type passed to function 'tail'. Err0r.");
+	LASSERT(a, a->cell[0]->count != 0, "Function 'tail' is passed {} which is empty. Err0r.");
+	
 
 	/* take the first arugument */
 	lval *v = lval_take(a, 0);
@@ -326,6 +307,45 @@ lval* builtin_tail(lval *a){
 	lval_del(lval_pop(v, 0));
 
 	return v;
+}
+
+lval* builtin_list(lval *a){
+	a->type = LVAL_QEXPR;
+	return a;
+}
+
+lval* builtin_eval(lval *a){
+	LASSERT(a, a->count == 1, "Function 'eval' passed way too many arguments. Err0r.");
+	LASSERT(a, a->cell[0]->type == LVAL_QEXPR, "Function 'eval' passed incorrect type. Err0r.");
+	
+	lval *x = lval_take(a, 0);
+	x->type	= LVAL_SEXPR;
+	return lval_eval(x);
+}
+
+lval* lval_join(lval *x, lval *y){
+	/* For each cell in 'y' add it to 'x' */
+	while(y->count){
+		x = lval_add(x, lval_pop(y, 0));
+	}
+
+	lval_del(y);
+	return x;
+}
+
+lval* builtin_join(lval *a){
+	for(int i=0; i< a->count; i++){
+		LASSERT(a, a->cell[i]->type == LVAL_QEXPR, "Function 'join' passed incorrect type. Err0r. ");
+	}
+
+	lval* x = lval_pop(a, 0);
+
+	while(a->count){
+		x = lval_join(x, lval_pop(a, 0));
+	}
+
+	lval_del(a);
+	return x;
 }
 
 lval* builtin_op(lval *a, char *op){
@@ -371,6 +391,21 @@ lval* builtin_op(lval *a, char *op){
 	return x;
 }
 
+
+lval* builtin(lval* a, char* func){
+	if(strcmp("list", func) == 0) {return builtin_list(a); }
+	if(strcmp("head", func) == 0) {return builtin_head(a); }
+	if(strcmp("tail", func) == 0) {return builtin_tail(a); }
+	if(strcmp("join", func) == 0) {return builtin_join(a); }
+	if(strcmp("eval", func) == 0) {return builtin_eval(a); }
+	if(strstr("+-*/maxmin^%", func)) {return builtin_op(a, func); }
+
+	lval_del(a);
+	return lval_err("Unknown funtion used. Err0r!");
+}
+
+
+
 lval* lval_eval_sexpr(lval *v){
 	
 	/*Evaluate children*/
@@ -398,7 +433,7 @@ lval* lval_eval_sexpr(lval *v){
 	}
 
 	/* Call builtin_op() with the operator */
-	lval *result = builtin_op(v, f->sym);
+	lval *result = builtin(v, f->sym);
 	lval_del(f);
 	return result;
 }
@@ -457,9 +492,7 @@ int main(int argc, char** argv){
 		mpc_result_t r;
 		/* On success, print the AST */
 		if(mpc_parse("<stdin>", input, Peasant, &r)){
-			//lval result = eval(r.output);
-			//lval_println( result);
-			lval* x =(lval_read(r.output));
+			lval* x = lval_eval(lval_read(r.output));
 			lval_println(x);
 			lval_del(x);
 			//mpc_ast_print(r.output);
