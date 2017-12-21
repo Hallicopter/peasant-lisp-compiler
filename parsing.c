@@ -35,8 +35,12 @@ void add_history(char *dummy){}
 #include <editline/history.h>
 #endif
 
-#define LASSERT(args, cond, err) \
-	if(!(cond)) {lval_del(args); return lval_err(err); }
+#define LASSERT(args, cond, fmt, ...) \
+	if(!(cond)) { \
+		lval *err = lval_err(fmt, ##__VA_ARGS__); \
+	       	lval_del(args); \
+		return err; \
+	}
 
 /* Forward declerations */
 struct lval;
@@ -95,7 +99,7 @@ void lenv_del(lenv *e){
 	free(e);
 }
 lval* lval_copy(lval* v);
-lval* lval_err(char* m);
+lval* lval_err(char* m, ...);
 lval *lenv_get(lenv *e, lval *k){
 	/* Iterate over all the variables in the environment */
 	for(int i=0; i<e->count; i++){
@@ -106,7 +110,7 @@ lval *lenv_get(lenv *e, lval *k){
 	}
 
 	/* If symbol not found return error */
-	return lval_err("Unbound err0r.");
+	return lval_err("Unbound symbol '%s'.", k->sym);
 }
 
 void lenv_put(lenv *e, lval *k, lval *v){
@@ -142,11 +146,24 @@ lval* lval_num(double x){
 }
 
 /*Create a new error type lval*/
-lval* lval_err(char* m){
+lval* lval_err(char* fmt, ...){
 	lval* v = malloc(sizeof(lval));
 	v->type = LVAL_ERR;
-	v->err = malloc(sizeof(strlen(m) + 1));
-	strcpy(v->err, m);
+	/* Create a va list and initialise it */
+	va_list va;
+	va_start(va, fmt);
+
+	/* Allocate 512 bytes of space first */
+	v->err = malloc(512);
+	
+	/* printf the error string with a maximum of 511 character */
+	vsnprintf(v->err, 511, fmt, va);
+
+	/* Reallocate the number of bytes to what is actually used. Resourcefulness ting */
+	v->err = realloc(v->err, strlen(v->err)+1);
+
+	/* cleanup our va_list */
+	va_end(va);
 
 	return v;
 }
@@ -388,11 +405,26 @@ lval* lval_copy(lval* v){
 	return x;
 }
 
+char *ltype_name(int t){
+	switch(t){
+		case LVAL_FUN 	: return "Function";
+		case LVAL_NUM 	: return "Number";
+		case LVAL_ERR 	: return "Error";
+		case LVAL_SYM 	: return "Symbol";
+		case LVAL_SEXPR : return "S-Expression";
+		case LVAL_QEXPR : return "Q-Expression";
+
+		default: return "Unknown";
+	}
+}
+
 lval *builtin_head(lenv *e, lval *a){
 	/* Check the error condition */
-	LASSERT(a, a->count == 1, "Function 'head' has way too many arguements. Err0r.");
-	LASSERT(a, a->cell[0]->type == LVAL_QEXPR, "Incorrect type passed to function 'head'. Err0r.");
-	LASSERT(a, a->cell[0]->count != 0, "Function head is passed {} which is empty. Err0r.");
+	LASSERT(a, a->count == 1, "Function 'head' has way too many arguements.", "Got %i, expected %i", a->count, 1);
+	LASSERT(a, a->cell[0]->type == LVAL_QEXPR
+		, "Incorrect type passed to function 'head'.", "Got %s, expected %s"
+		, ltype_name(a->cell[0]->type), ltype_name(LVAL_QEXPR));
+	LASSERT(a, a->cell[0]->count != 0, "Function head is passed {} which is empty.");
 	
 	/* If no error, get the first arguements */
 	lval *v = lval_take(a, 0);
@@ -407,8 +439,10 @@ lval *builtin_head(lenv *e, lval *a){
 
 lval* builtin_tail(lenv *e, lval *a){
 	/* Check the error condition */
-	LASSERT(a, a->count == 1, "Function 'tail' has way too many arguements. Err0r.");
-	LASSERT(a, a->cell[0]->type == LVAL_QEXPR, "Incorrect type passed to function 'tail'. Err0r.");
+	LASSERT(a, a->count == 1, "Function 'tail' has way too many arguements.",  "Got %i, expected %i", a->count, 1);
+	LASSERT(a, a->cell[0]->type == LVAL_QEXPR, "Incorrect type passed to function 'tail'." , "Got %s, expected %s"
+		, ltype_name(a->cell[0]->type), ltype_name(LVAL_SEXPR));
+
 	LASSERT(a, a->cell[0]->count != 0, "Function 'tail' is passed {} which is empty. Err0r.");
 	
 
@@ -550,7 +584,8 @@ void lenv_add_builtin(lenv* e, char *name, lbuiltin func){
 }
 
 lval *builtin_def(lenv *e, lval *a){
-	LASSERT(a, a->cell[0]->type == LVAL_QEXPR, "Function def passed incorrect type. Err0r.");
+	LASSERT(a, a->cell[0]->type == LVAL_QEXPR, "Function def passed incorrect type.", "Expected %s, got %s"
+			, ltype_name(LVAL_QEXPR), ltype_name(a->cell[0]->type));
 
 	/* The first arguements is the symbols list */
 	lval *syms = a->cell[0];
