@@ -193,7 +193,7 @@ void lval_del(lval* v){
 	switch(v->type){
 		case LVAL_NUM: break;
 		case LVAL_FUN: break;
-		case LVAL_ERR: free(v->err); break;
+//		case LVAL_ERR: free(v->err); break;
 		case LVAL_SYM: free(v->sym); break;
 		
 		/* For Qexpr and Sexpr delete all the cells recursively */
@@ -549,6 +549,30 @@ void lenv_add_builtin(lenv* e, char *name, lbuiltin func){
 	lval_del(v);
 }
 
+lval *builtin_def(lenv *e, lval *a){
+	LASSERT(a, a->cell[0]->type == LVAL_QEXPR, "Function def passed incorrect type. Err0r.");
+
+	/* The first arguements is the symbols list */
+	lval *syms = a->cell[0];
+
+	/* Have to make sure all the elements in the list are symbols */
+	for(int i=0; i< syms->count; i++){
+		LASSERT(a, syms->cell[i]->type == LVAL_SYM, "Function 'def' can't define a non symbol. Err0r.");
+	}
+
+	/* Check whether there exist a correct number of symbols and values */
+	LASSERT(a, syms->count == a->count-1, "Function def cannot define, incorrext number of values to symbols.");
+
+	/* Assigns copies of values to their respective sybmols */
+	for(int i=0; i<syms->count; i++){
+		lenv_put(e, syms->cell[i], a->cell[i+1]);
+	}
+
+	lval_del(a);
+	return lval_sexpr();
+}
+
+
 void lenv_add_builtins(lenv *e){
 	/* List Functions */
 	lenv_add_builtin(e, "list", builtin_list);
@@ -558,7 +582,6 @@ void lenv_add_builtins(lenv *e){
 	lenv_add_builtin(e, "join", builtin_join);
 
 	/* Mathematical functions */
-
 	lenv_add_builtin(e, "+", builtin_add);
 	lenv_add_builtin(e, "*", builtin_mul);
 	lenv_add_builtin(e, "/", builtin_div);
@@ -567,6 +590,9 @@ void lenv_add_builtins(lenv *e){
 	lenv_add_builtin(e, "max", builtin_max);
 	lenv_add_builtin(e, "min", builtin_min);
 	lenv_add_builtin(e, "%", builtin_mod);
+
+	/* Variable functions */
+	lenv_add_builtin(e, "def", builtin_def);
 }
 
 lval* lval_eval_sexpr(lenv *e, lval *v){
